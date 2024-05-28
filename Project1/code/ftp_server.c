@@ -10,7 +10,7 @@
 #include <sys/wait.h>
 #include <sys/stat.h>
 #include <errno.h>
-#include "ftp_common.h"
+
 
 void handle_client(int client_socket);
 void handle_user(int client_socket, char *command);
@@ -43,7 +43,7 @@ int main() {
     memset(&server_addr, 0, sizeof(server_addr));
     server_addr.sin_family = AF_INET;
     server_addr.sin_addr.s_addr = INADDR_ANY;
-    server_addr.sin_port = htons(21);
+    server_addr.sin_port = htons(2121);
 
     if (bind(server_socket, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
         perror("Bind failed");
@@ -163,7 +163,7 @@ void handle_pass(int client_socket, char *command) {
     sscanf(command, "PASS %s", password);
 
     if (strlen(logged_in_user) == 0) {
-        send(client_socket, "530 Not logged in.\r\n", 21, 0);
+        send(client_socket, "530 Not logged in.\r\n", 2121, 0);
         return;
     }
 
@@ -187,7 +187,7 @@ void handle_pass(int client_socket, char *command) {
         printf("Successful login\n");
         send(client_socket, "230 User logged in, proceed.\r\n", 30, 0);
     } else {
-        send(client_socket, "530 Not logged in.\r\n", 21, 0);
+        send(client_socket, "530 Not logged in.\r\n", 2121, 0);
         logged_in_user[0] = '\0'; // Clear the logged-in user on failure
         logged_in_pass[0] = '\0'; // Clear the logged-in password on failure
     }
@@ -207,7 +207,6 @@ void handle_retr(int client_socket, char *command) {
     char filename[1024];
     sscanf(command, "RETR %s", filename);
     // Handle PORT command before sending file
-    send(client_socket, "200 PORT command successful.\r\n", 30, 0);
     int data_socket = setup_data_connection();
     if (data_socket < 0) {
         send(client_socket, "425 Can't open data connection.\r\n", 33, 0);
@@ -225,7 +224,7 @@ void handle_retr(int client_socket, char *command) {
         fclose(file);
         send(client_socket, "226 Transfer complete.\r\n", 26, 0);
     } else {
-        send(client_socket, "550 File not found.\r\n", 21, 0);
+        send(client_socket, "550 File not found.\r\n", 2121, 0);
     }
     close(data_socket);
 }
@@ -234,7 +233,6 @@ void handle_stor(int client_socket, char *command) {
     char filename[1024];
     sscanf(command, "STOR %s", filename);
     // Handle PORT command before receiving file
-    send(client_socket, "200 PORT command successful.\r\n", 30, 0);
     int data_socket = setup_data_connection();
     if (data_socket < 0) {
         send(client_socket, "425 Can't open data connection.\r\n", 33, 0);
@@ -258,20 +256,12 @@ void handle_stor(int client_socket, char *command) {
 }
 
 void handle_list(int client_socket, char *command) {
-    // Confirm that the PORT command was successful before listing directory contents
-    if (strlen(client_ip) == 0 || client_data_port == 0) {
-        send(client_socket, "503 Bad sequence of commands.\r\n", 31, 0);
-        return;
-    }
-
     // Open a connection to the client's data port
     int data_socket = setup_data_connection();
     if (data_socket < 0) {
         send(client_socket, "425 Can't open data connection.\r\n", 33, 0);
         return;
     }
-
-    printf("Port received: %s,%d\n", client_ip, client_data_port);
     send(client_socket, "150 File status okay; about to open data connection.\r\n", 53, 0);
 
     FILE *pipe = popen("ls", "r");
@@ -287,6 +277,7 @@ void handle_list(int client_socket, char *command) {
     }
     close(data_socket);
 }
+
 
 void handle_port(int client_socket, char *command) {
     int h1, h2, h3, h4, p1, p2;
@@ -328,6 +319,8 @@ int setup_data_connection() {
     data_addr.sin_port = htons(client_data_port);
     inet_pton(AF_INET, client_ip, &data_addr.sin_addr);
 
+    printf("Attempting to connect to %s:%d\n", client_ip, client_data_port); // Debugging print
+
     if (connect(data_socket, (struct sockaddr*)&data_addr, sizeof(data_addr)) < 0) {
         perror("Data connection failed");
         close(data_socket);
@@ -339,4 +332,5 @@ int setup_data_connection() {
 
     return data_socket;
 }
+
 

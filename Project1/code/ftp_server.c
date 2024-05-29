@@ -11,7 +11,6 @@
 #include <sys/stat.h>
 #include <errno.h>
 
-
 void handle_client(int client_socket);
 void handle_user(int client_socket, char *command);
 void handle_pass(int client_socket, char *command);
@@ -22,12 +21,31 @@ void handle_list(int client_socket, char *command);
 void handle_port(int client_socket, char *command);
 void handle_pwd(int client_socket);
 void handle_quit(int client_socket);
+void print_welcome_message(int client_socket);
 int setup_data_connection();
 
 char client_ip[16] = "";
 int client_data_port = 0;
 char logged_in_user[50] = ""; // Store the logged-in user's name
 char logged_in_pass[50] = ""; // Store the logged-in user's password
+
+void print_welcome_message(int client_socket) {
+    const char *welcome_message =
+        "Hello!! Please Authenticate to run server commands\n"
+        "1. type \"USER\" followed by a space and your username\n"
+        "2. type \"PASS\" followed by a space and your password\n"
+        "\n"
+        "\"QUIT\" to close connection at any moment\n"
+        "Once Authenticated\n"
+        "this is the list of commands:\n"
+        "\"STOR\" + space + filename |to send a file to the server\n"
+        "\"RETR\" + space + filename |to download a file from the server\n"
+        "\"LIST\" |to to list all the files under the current server directory\n"
+        "\"CWD\" + space + directory |to change the current server directory\n"
+        "\"PWD\" to display the current server directory\n"
+        "Add \"!\" before the last three commands to apply them locally\n";
+    send(client_socket, welcome_message, strlen(welcome_message), 0);
+}
 
 int main() {
     int server_socket, client_socket;
@@ -92,6 +110,9 @@ int main() {
 void handle_client(int client_socket) {
     char buffer[1024];
     int n;
+
+    // Send welcome message with instructions and commands
+    print_welcome_message(client_socket);
 
     // Send welcome message
     send(client_socket, "220 Service ready for new user.\r\n", 32, 0);
@@ -163,7 +184,7 @@ void handle_pass(int client_socket, char *command) {
     sscanf(command, "PASS %s", password);
 
     if (strlen(logged_in_user) == 0) {
-        send(client_socket, "530 Not logged in.\r\n", 2121, 0);
+        send(client_socket, "530 Not logged in.\r\n", 21, 0);
         return;
     }
 
@@ -187,7 +208,7 @@ void handle_pass(int client_socket, char *command) {
         printf("Successful login\n");
         send(client_socket, "230 User logged in, proceed.\r\n", 30, 0);
     } else {
-        send(client_socket, "530 Not logged in.\r\n", 2121, 0);
+        send(client_socket, "530 Not logged in.\r\n", 21, 0);
         logged_in_user[0] = '\0'; // Clear the logged-in user on failure
         logged_in_pass[0] = '\0'; // Clear the logged-in password on failure
     }
@@ -224,7 +245,7 @@ void handle_retr(int client_socket, char *command) {
         fclose(file);
         send(client_socket, "226 Transfer complete.\r\n", 26, 0);
     } else {
-        send(client_socket, "550 File not found.\r\n", 2121, 0);
+        send(client_socket, "550 File not found.\r\n", 21, 0);
     }
     close(data_socket);
 }
@@ -277,7 +298,6 @@ void handle_list(int client_socket, char *command) {
     }
     close(data_socket);
 }
-
 
 void handle_port(int client_socket, char *command) {
     int h1, h2, h3, h4, p1, p2;
@@ -332,5 +352,3 @@ int setup_data_connection() {
 
     return data_socket;
 }
-
-

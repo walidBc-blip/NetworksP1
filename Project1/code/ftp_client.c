@@ -2,24 +2,26 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
+#include<sys/socket.h>
+#include<arpa/inet.h>
+#include <netinet/in.h> 
 #include <dirent.h>
 #include <time.h>
-#include <arpa/inet.h>
-#include <sys/socket.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #include <sys/select.h>
 
-#define BUFFER_CAPACITY 2048 
+#define BUFFER_CAPACITY 2048
+#define CTRL_PORT 2121
+#define DATA_CHANNEL_PORT 2020
 
-#define CTRL_PORT 2121 
-#define DATA_CHANNEL_PORT 2020 
-bool serverActive = true; 
-int authStatus = -1; 
+bool serverActive = true;
+int authStatus = -1;
 
 int initializeSocket(bool listenMode, int portNumber);
 void handleClientCommand(char *commandBuffer, int controlSocketFd);
 char *generatePortString(const char *ip, int port);
+int generatePort();
 char *transmitToServer(int socketFd, const char *buffer);
 bool configurePortCommand(int socketFd, int channel);
 void executeLocalPWD();
@@ -27,52 +29,35 @@ void executeLocalCWD(char *buffer);
 void executeLocalLIST();
 
 int main() {
-    // Initialize the control socket
     int controlSocketFd = initializeSocket(false, CTRL_PORT);
-
-    // Buffer to store client commands
     char commandBuffer[BUFFER_CAPACITY];
 
-    // Main loop to process client commands
     while (serverActive) {
-        // Prompt the user for input
         printf("ftp> ");
-        
-        // Read the client input
         if (fgets(commandBuffer, BUFFER_CAPACITY, stdin) != NULL) {
-            // Remove the trailing newline character from the input
             commandBuffer[strcspn(commandBuffer, "\n")] = '\0';
-
-            // Handle the client command
             handleClientCommand(commandBuffer, controlSocketFd);
-
-            // Clear the command buffer for the next input
             memset(commandBuffer, 0, BUFFER_CAPACITY);
         } else {
-            // Handle error or EOF
             perror("Error reading input");
             break;
         }
     }
 
-    // Clean up and close the control socket before exiting
     close(controlSocketFd);
     return 0;
 }
 
 int initializeSocket(bool listenMode, int portNumber) {
-    // Create a socket
     int sockFd = socket(AF_INET, SOCK_STREAM, 0);
     if (sockFd == -1) {
         perror("Socket creation failed");
         exit(EXIT_FAILURE);
     }
 
-    // Set socket options
     int optionValue = 1;
     setsockopt(sockFd, SOL_SOCKET, SO_REUSEADDR, &optionValue, sizeof(optionValue));
 
-    // Configure the socket address structure
     struct sockaddr_in socketAddress;
     memset(&socketAddress, 0, sizeof(socketAddress));
     socketAddress.sin_family = AF_INET;
@@ -80,21 +65,18 @@ int initializeSocket(bool listenMode, int portNumber) {
     socketAddress.sin_addr.s_addr = INADDR_ANY;
 
     if (listenMode) {
-        // Bind the socket to the address and port
         if (bind(sockFd, (struct sockaddr *)&socketAddress, sizeof(socketAddress)) < 0) {
             perror("Socket binding failed");
             close(sockFd);
             exit(EXIT_FAILURE);
         }
 
-        // Set the socket to listen mode
         if (listen(sockFd, 5) < 0) {
             perror("Listening failed");
             close(sockFd);
             exit(EXIT_FAILURE);
         }
     } else {
-        // Connect the socket to the address and port
         if (connect(sockFd, (struct sockaddr *)&socketAddress, sizeof(socketAddress)) == -1) {
             perror("Connection failed");
             close(sockFd);
@@ -109,28 +91,20 @@ bool configurePortCommand(int socketFd, int channel) {
     struct sockaddr_in address;
     socklen_t addressLength = sizeof(address);
 
-    // Retrieve the local address and port number assigned to the socket
     if (getsockname(channel, (struct sockaddr *)&address, &addressLength) == -1) {
         perror("Failed to get socket name");
         return false;
     }
 
-    // Convert the IP address to a string
     char *ipAddress = inet_ntoa(address.sin_addr);
     int portNumber = ntohs(address.sin_port);
-
-    // Generate the PORT command message
     char *portMessage = generatePortString(ipAddress, portNumber);
-
-    // Prepare the command buffer
     char commandBuffer[BUFFER_CAPACITY];
     snprintf(commandBuffer, BUFFER_CAPACITY, "PORT %s", portMessage);
 
-    // Send the command to the server and receive the response
     char *responseCode = transmitToServer(socketFd, commandBuffer);
     bool isCommandSuccessful = strstr(responseCode, "200") != NULL;
 
-    // Clean up
     free(portMessage);
     free(responseCode);
 
@@ -368,7 +342,7 @@ char *generatePortString(const char *ip, int port) {
     int p2 = port % 256;
     char *modifiedIp = strdup(ip);
 
-    for (int i = 0; i < strlen(modifiedIp); i++) {
+    for (int i = 0; strlen(modifiedIp) && modifiedIp[i]; i++) {
         if (modifiedIp[i] == '.') {
             modifiedIp[i] = ',';
         }

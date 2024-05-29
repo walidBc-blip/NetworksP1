@@ -7,10 +7,8 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <sys/select.h>
-#include <sys/wait.h>
 #include <sys/stat.h>
-#include <errno.h>
-#include "ftp_common.h"
+
 
 void handle_client(int client_socket);
 void handle_user(int client_socket, char *command);
@@ -26,8 +24,8 @@ int setup_data_connection();
 
 char client_ip[16] = "";
 int client_data_port = 0;
-char logged_in_user[50] = ""; // Store the logged-in user's name
-char logged_in_pass[50] = ""; // Store the logged-in user's password
+char logged_in_user[50] = "";
+char logged_in_pass[50] = "";
 
 int main() {
     int server_socket, client_socket;
@@ -43,7 +41,7 @@ int main() {
     memset(&server_addr, 0, sizeof(server_addr));
     server_addr.sin_family = AF_INET;
     server_addr.sin_addr.s_addr = INADDR_ANY;
-    server_addr.sin_port = htons(21);
+    server_addr.sin_port = htons(2121);  // Using non-privileged port 2121
 
     if (bind(server_socket, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
         perror("Bind failed");
@@ -77,8 +75,6 @@ int main() {
             }
             if (fork() == 0) {
                 close(server_socket);
-                printf("Connection established with user %s\n", inet_ntoa(client_addr.sin_addr));
-                printf("Their port: %d\n", ntohs(client_addr.sin_port));
                 handle_client(client_socket);
                 close(client_socket);
                 exit(0);
@@ -99,7 +95,6 @@ void handle_client(int client_socket) {
     // Command loop
     while ((n = recv(client_socket, buffer, 1024, 0)) > 0) {
         buffer[n] = '\0';
-        printf("Received command: %s\n", buffer); // Debugging print
         if (strncmp(buffer, "USER", 4) == 0) {
             handle_user(client_socket, buffer);
         } else if (strncmp(buffer, "PASS", 4) == 0) {
@@ -118,19 +113,31 @@ void handle_client(int client_socket) {
             handle_pwd(client_socket);
         } else if (strncmp(buffer, "QUIT", 4) == 0) {
             handle_quit(client_socket);
-            break; // Exit the loop to close the connection
+            break;
         } else {
             send(client_socket, "502 Command not implemented.\r\n", 30, 0);
         }
     }
 }
 
+
+void print_current_directory() {
+    char cwd[1024];
+    if (getcwd(cwd, sizeof(cwd)) != NULL) {
+        printf("Current working directory: %s\n", cwd);
+    } else {
+        perror("getcwd() error");
+    }
+}
+
+
 void handle_user(int client_socket, char *command) {
     char username[50];
     sscanf(command, "USER %s", username);
-    printf("Received USER command with username: %s\n", username); // Debugging print
 
-    // Check if user exists in users.csv
+     print_current_directory();
+
+    // Use relative path to users.csv
     FILE *fp = fopen("../users.csv", "r");
     if (!fp) {
         perror("Failed to open users.csv");
@@ -143,15 +150,14 @@ void handle_user(int client_socket, char *command) {
     while (fscanf(fp, "%49[^,],%49[^\n]\n", file_user, file_pass) != EOF) {
         if (strcmp(username, file_user) == 0) {
             user_found = 1;
-            strcpy(logged_in_user, username); // Store the username
-            strcpy(logged_in_pass, file_pass); // Store the password
+            strcpy(logged_in_user, username);
+            strcpy(logged_in_pass, file_pass);
             break;
         }
     }
     fclose(fp);
 
     if (user_found) {
-        printf("Successful username verification\n");
         send(client_socket, "331 Username OK, need password.\r\n", 33, 0);
     } else {
         send(client_socket, "530 Not logged in.\r\n", 21, 0);
@@ -167,29 +173,27 @@ void handle_pass(int client_socket, char *command) {
         return;
     }
 
-    // Check if the password matches the stored password for the logged-in user
     if (strcmp(password, logged_in_pass) == 0) {
-        // Check if user's directory exists, if not, create it
         struct stat st = {0};
-        if (stat(logged_in_user, &st) == -1) {
-            if (mkdir(logged_in_user, 0700) == -1) {
+        char user_dir[100];
+        snprintf(user_dir, sizeof(user_dir), "../server/%s", logged_in_user);
+        if (stat(user_dir, &st) == -1) {
+            if (mkdir(user_dir, 0700) == -1) {
                 perror("Failed to create user directory");
                 send(client_socket, "550 Failed to create user directory.\r\n", 39, 0);
                 return;
             }
         }
-        if (chdir(logged_in_user) == -1) {
+        if (chdir(user_dir) == -1) {
             perror("Failed to change to user directory");
             send(client_socket, "550 Failed to change to user directory.\r\n", 43, 0);
             return;
         }
-
-        printf("Successful login\n");
         send(client_socket, "230 User logged in, proceed.\r\n", 30, 0);
     } else {
         send(client_socket, "530 Not logged in.\r\n", 21, 0);
-        logged_in_user[0] = '\0'; // Clear the logged-in user on failure
-        logged_in_pass[0] = '\0'; // Clear the logged-in password on failure
+        logged_in_user[0] = '\0';
+        logged_in_pass[0] = '\0';
     }
 }
 
@@ -206,8 +210,6 @@ void handle_cwd(int client_socket, char *command) {
 void handle_retr(int client_socket, char *command) {
     char filename[1024];
     sscanf(command, "RETR %s", filename);
-    // Handle PORT command before sending file
-    send(client_socket, "200 PORT command successful.\r\n", 30, 0);
     int data_socket = setup_data_connection();
     if (data_socket < 0) {
         send(client_socket, "425 Can't open data connection.\r\n", 33, 0);
@@ -233,8 +235,6 @@ void handle_retr(int client_socket, char *command) {
 void handle_stor(int client_socket, char *command) {
     char filename[1024];
     sscanf(command, "STOR %s", filename);
-    // Handle PORT command before receiving file
-    send(client_socket, "200 PORT command successful.\r\n", 30, 0);
     int data_socket = setup_data_connection();
     if (data_socket < 0) {
         send(client_socket, "425 Can't open data connection.\r\n", 33, 0);
@@ -258,20 +258,17 @@ void handle_stor(int client_socket, char *command) {
 }
 
 void handle_list(int client_socket, char *command) {
-    // Confirm that the PORT command was successful before listing directory contents
     if (strlen(client_ip) == 0 || client_data_port == 0) {
         send(client_socket, "503 Bad sequence of commands.\r\n", 31, 0);
         return;
     }
 
-    // Open a connection to the client's data port
     int data_socket = setup_data_connection();
     if (data_socket < 0) {
         send(client_socket, "425 Can't open data connection.\r\n", 33, 0);
         return;
     }
 
-    printf("Port received: %s,%d\n", client_ip, client_data_port);
     send(client_socket, "150 File status okay; about to open data connection.\r\n", 53, 0);
 
     FILE *pipe = popen("ls", "r");
@@ -293,7 +290,6 @@ void handle_port(int client_socket, char *command) {
     sscanf(command, "PORT %d,%d,%d,%d,%d,%d", &h1, &h2, &h3, &h4, &p1, &p2);
     sprintf(client_ip, "%d.%d.%d.%d", h1, h2, h3, h4);
     client_data_port = (p1 * 256) + p2;
-    printf("Port received: %d,%d,%d,%d,%d,%d\n", h1, h2, h3, h4, p1, p2);
     send(client_socket, "200 PORT command successful.\r\n", 30, 0);
 }
 
@@ -310,7 +306,6 @@ void handle_pwd(int client_socket) {
 
 void handle_quit(int client_socket) {
     send(client_socket, "221 Service closing control connection.\r\n", 40, 0);
-    printf("Closed!\n");
 }
 
 int setup_data_connection() {
@@ -334,9 +329,5 @@ int setup_data_connection() {
         return -1;
     }
 
-    printf("Connecting to Client Transfer Socket...\n");
-    printf("Connection Successful\n");
-
     return data_socket;
 }
-

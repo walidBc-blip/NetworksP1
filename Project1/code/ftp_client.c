@@ -197,98 +197,100 @@ void handleClientCommand(char *commandBuffer, int controlSocketFd) {
                         }
 
                         if (strncmp(command, "STOR", 4) == 0) {
-    char *filename = commandBuffer + 5;
-    FILE *file = fopen(filename, "rb");
-    if (file) {
-        struct stat fileStat;
-        stat(filename, &fileStat);
-        int fileSize = fileStat.st_size;
-        char *fileBuffer = malloc(fileSize);
-        fread(fileBuffer, 1, fileSize, file);
+                            char *filename = commandBuffer + 5;
+                            FILE *file = fopen(filename, "rb");
+                            if (file) {
+                                struct stat fileStat;
+                                stat(filename, &fileStat);
+                                int fileSize = fileStat.st_size;
+                                char *fileBuffer = malloc(fileSize);
+                                fread(fileBuffer, 1, fileSize, file);
 
-        int bytesSent = 0;
-        while (bytesSent < fileSize) {
-            int bytes = write(clientFd, fileBuffer + bytesSent, fileSize - bytesSent);
-            if (bytes == -1) {
-                perror("write failed");
-                break;
-            }
-            bytesSent += bytes;
-        }
-        free(fileBuffer);
-        fclose(file);
-    } else {
-        perror("fopen failed");
-    }
-}
-else if (strncmp(command, "RETR", 4) == 0) {
-    char *filename = commandBuffer + 5;
-    FILE *file = fopen(filename, "wb");
-    if (file) {
-        char fileBuffer[BUFFER_CAPACITY];
-        int bytesRead;
-        while ((bytesRead = read(clientFd, fileBuffer, BUFFER_CAPACITY)) > 0) {
-            fwrite(fileBuffer, 1, bytesRead, file);
-        }
-        fclose(file);
-    } else {
-        perror("fopen failed");
-    }
-} else if (strncmp(command, "LIST", 4) == 0) {
-                        char dataBuffer[BUFFER_CAPACITY];
-                        int bytesRead;
-                        while ((bytesRead = read(clientFd, dataBuffer, BUFFER_CAPACITY)) > 0) {
-                            fwrite(dataBuffer, 1, bytesRead, stdout);
+                                int bytesSent = 0;
+                                while (bytesSent < fileSize) {
+                                    int bytes = write(clientFd, fileBuffer + bytesSent, fileSize - bytesSent);
+                                    if (bytes == -1) {
+                                        perror("write failed");
+                                        break;
+                                    }
+                                    bytesSent += bytes;
+                                }
+                                free(fileBuffer);
+                                fclose(file);
+                            } else {
+                                perror("fopen failed");
+                            }
+                        } else if (strncmp(command, "RETR", 4) == 0) {
+                            char *filename = commandBuffer + 5;
+                            FILE *file = fopen(filename, "wb");
+                            if (file) {
+                                char fileBuffer[BUFFER_CAPACITY];
+                                int bytesRead;
+                                while ((bytesRead = read(clientFd, fileBuffer, BUFFER_CAPACITY)) > 0) {
+                                    fwrite(fileBuffer, 1, bytesRead, file);
+                                }
+                                fclose(file);
+                            } else {
+                                perror("fopen failed");
+                            }
+                        } else if (strncmp(command, "LIST", 4) == 0) {
+                            char dataBuffer[BUFFER_CAPACITY];
+                            int bytesRead;
+                            while ((bytesRead = read(clientFd, dataBuffer, BUFFER_CAPACITY)) > 0) {
+                                fwrite(dataBuffer, 1, bytesRead, stdout);
+                            }
                         }
+
+                        close(clientFd);
+
+                        char finalBuffer[BUFFER_CAPACITY] = {0};
+                        read(controlSocketFd, finalBuffer, BUFFER_CAPACITY);
+                        printf("%s\n", finalBuffer);
+                        printf("ftp> ");
+                        exit(EXIT_SUCCESS);
                     }
-
-                    close(clientFd);
-
-                    char finalBuffer[BUFFER_CAPACITY] = {0};
-                    read(controlSocketFd, finalBuffer, BUFFER_CAPACITY);
-                    printf("%s\n", finalBuffer);
-                    printf("ftp> ");
-                    exit(EXIT_SUCCESS);
                 }
             }
         } else {
             transmitToServer(controlSocketFd, commandBuffer);
         }
-    } else {
-        transmitToServer(controlSocketFd, commandBuffer);
     }
+    memset(commandBuffer, 0, BUFFER_CAPACITY);
 }
-memset(commandBuffer, 0, BUFFER_CAPACITY);}
+
 void executeLocalPWD() {
-char *cwd = getcwd(NULL, 0);
-if (cwd) {
-printf("Current working directory: %s\n", cwd);
-free(cwd);
-} else {
-perror("getcwd failed");
+    char *cwd = getcwd(NULL, 0);
+    if (cwd) {
+        printf("Current working directory: %s\n", cwd);
+        free(cwd);
+    } else {
+        perror("getcwd failed");
 }
 }
 void executeLocalCWD(char *buffer) {
-char *dir = buffer + 5;
-if (chdir(dir) != 0) {
-perror("chdir failed");
-} else {
-executeLocalPWD();
+    char *dir = buffer + 5;
+    if (chdir(dir) != 0) {
+        perror("chdir failed");
+    } else {
+        executeLocalPWD();
 }
 }
+
 void executeLocalLIST() {
-DIR *dir = opendir(".");
-if (dir) {
-struct dirent *entry;
-while ((entry = readdir(dir)) != NULL) {
-char type = entry->d_type == DT_DIR ? 'D' : 'F';
-printf("%c\t%s\n", type, entry->d_name);
+    DIR *dir = opendir(".");
+    if (dir) {
+        struct dirent *entry;
+        while ((entry = readdir(dir)) != NULL) {
+            char type = entry->d_type == DT_DIR ? 'D' : 'F';
+            printf("%c\t%s\n", type, entry->d_name);
+        }
+        closedir(dir);
+    } else {
+        perror("opendir failed");
+    }
 }
-closedir(dir);
-} else {
-perror("opendir failed");
-}
-}
+
+
 char *generatePortString(const char *ip, int port) {
 int p1 = port / 256;
 int p2 = port % 256;

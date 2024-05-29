@@ -151,6 +151,10 @@ void handle_user(int client_socket, char *command) {
     sscanf(command, "USER %s", username);
     printf("Received USER command with username: %s\n", username); // Debugging print
 
+    // Reset the login state
+    logged_in_user[0] = '\0';
+    logged_in_pass[0] = '\0';
+
     // Check if user exists in users.csv
     FILE *fp = fopen("../users.csv", "r");
     if (!fp) {
@@ -208,7 +212,7 @@ void handle_pass(int client_socket, char *command) {
         printf("Successful login\n");
         send(client_socket, "230 User logged in, proceed.\r\n", 30, 0);
     } else {
-        send(client_socket, "530 Not logged in.\r\n", 21, 0);
+        send(client_socket, "530 Incorrect password. Not logged in.\r\n", 41, 0);
         logged_in_user[0] = '\0'; // Clear the logged-in user on failure
         logged_in_pass[0] = '\0'; // Clear the logged-in password on failure
     }

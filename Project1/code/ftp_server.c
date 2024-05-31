@@ -43,7 +43,8 @@ void print_welcome_message(int client_socket) {
         "\"LIST\" |to to list all the files under the current server directory\n"
         "\"CWD\" + space + directory |to change the current server directory\n"
         "\"PWD\" to display the current server directory\n"
-        "Add \"!\" before the last three commands to apply them locally\n";
+        "Add \"!\" before the last three commands to apply them locally\n"
+        "220 Service ready for new user.\r\n";
     send(client_socket, welcome_message, strlen(welcome_message), 0);
 }
 
@@ -115,7 +116,7 @@ void handle_client(int client_socket) {
     print_welcome_message(client_socket);
 
     // Send welcome message
-    send(client_socket, "220 Service ready for new user.\r\n", 32, 0);
+    // send(client_socket, "220 Service ready for new user.\r\n", 32, 0);
 
     // Command loop
     while ((n = recv(client_socket, buffer, 1024, 0)) > 0) {
@@ -136,6 +137,7 @@ void handle_client(int client_socket) {
         } else if (strncmp(buffer, "LIST", 4) == 0) {
             handle_list(client_socket, buffer);
         } else if (strncmp(buffer, "PWD", 3) == 0) {
+            printf("pwd");
             handle_pwd(client_socket);
         } else if (strncmp(buffer, "QUIT", 4) == 0) {
             handle_quit(client_socket);

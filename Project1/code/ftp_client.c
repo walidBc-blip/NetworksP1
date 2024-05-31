@@ -38,9 +38,10 @@ int main() {
     recv(controlSocketFd, commandBuffer, BUFFER_CAPACITY, 0);
     printf("%s\n", commandBuffer);
     // transmitToServer(controlSocketFd, commandBuffer);
-
+    
     while (serverActive) {
         // Prompt the user for input
+        
         printf("ftp> ");
 
         // Read the client input
@@ -250,6 +251,14 @@ void handleClientCommand(char *commandBuffer, int controlSocketFd) {
                         exit(EXIT_SUCCESS);
                     }
                 }
+            }
+            else if(strncmp(command, "PWD", 3) == 0){
+                            char *statusCode = transmitToServer(controlSocketFd, commandBuffer);
+
+            }
+             else if(strncmp(command, "CWD", 3) == 0){
+                            char *statusCode = transmitToServer(controlSocketFd, commandBuffer);
+
             }
         } else {
             transmitToServer(controlSocketFd, commandBuffer);

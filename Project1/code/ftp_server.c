@@ -21,7 +21,6 @@ void handle_list(int client_socket, char *command);
 void handle_port(int client_socket, char *command);
 void handle_pwd(int client_socket);
 void handle_quit(int client_socket);
-void print_welcome_message(int client_socket);
 int setup_data_connection();
 
 char client_ip[16] = "";
@@ -222,9 +221,20 @@ void handle_cwd(int client_socket, char *command) {
     char path[1024];
     sscanf(command, "CWD %s", path);
     if (chdir(path) == 0) {
-        send(client_socket, "200 Directory changed.\r\n", 24, 0);
+        send(client_socket, "250 Directory successfully changed.\r\n", 38, 0);
     } else {
-        send(client_socket, "550 Failed to change directory.\r\n", 33, 0);
+        send(client_socket, "550 Failed to change directory.\r\n", 35, 0);
+    }
+}
+
+void handle_pwd(int client_socket) {
+    char cwd[1024];
+    if (getcwd(cwd, sizeof(cwd)) != NULL) {
+        char response[1050];
+        snprintf(response, sizeof(response), "257 \"%s\"\r\n", cwd);
+        send(client_socket, response, strlen(response), 0);
+    } else {
+        send(client_socket, "550 Failed to get current directory.\r\n", 38, 0);
     }
 }
 

@@ -16,16 +16,16 @@ TARGETS = $(SERVER_OUT_DIR)/ftp_server $(CLIENT_OUT_DIR)/ftp_client
 
 all: $(TARGETS)
 
-$(SERVER_OUT_DIR)/ftp_server: $(CODE_DIR)/ftp_server.o
+$(SERVER_OUT_DIR)/ftp_server: $(CODE_DIR)/ftp_server.o $(CODE_DIR)/ftp_server.h
 	$(CC) $(CFLAGS) -o $@ $(CODE_DIR)/ftp_server.o
 
-$(CLIENT_OUT_DIR)/ftp_client: $(CODE_DIR)/ftp_client.o 
+$(CLIENT_OUT_DIR)/ftp_client: $(CODE_DIR)/ftp_client.o $(CODE_DIR)/ftp_client.h
 	$(CC) $(CFLAGS) -o $@ $(CODE_DIR)/ftp_client.o
 
-$(CODE_DIR)/ftp_server.o: $(CODE_DIR)/ftp_server.c 
+$(CODE_DIR)/ftp_server.o: $(CODE_DIR)/ftp_server.c $(HEADER_DIR)/ftp_server.h
 	$(CC) $(CFLAGS) -I$(HEADER_DIR) -c $< -o $@
 
-$(CODE_DIR)/ftp_client.o: $(CODE_DIR)/ftp_client.c 
+$(CODE_DIR)/ftp_client.o: $(CODE_DIR)/ftp_client.c $(HEADER_DIR)/ftp_client.h
 	$(CC) $(CFLAGS) -I$(HEADER_DIR) -c $< -o $@
 
 clean:

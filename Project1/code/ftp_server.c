@@ -10,19 +10,10 @@
 #include <sys/wait.h>
 #include <sys/stat.h>
 #include <errno.h>
+#include <ctype.h>
+#include "ftp_server.h"
 
-void handle_client(int client_socket);
-void handle_user(int client_socket, char *command);
-void handle_pass(int client_socket, char *command);
-void handle_cwd(int client_socket, char *command);
-void handle_retr(int client_socket, char *command);
-void handle_stor(int client_socket, char *command);
-void handle_list(int client_socket, char *command);
-void handle_port(int client_socket, char *command);
-void handle_pwd(int client_socket);
-void handle_quit(int client_socket);
-void print_welcome_message(int client_socket);
-int setup_data_connection();
+
 
 char client_ip[16] = "";
 int client_data_port = 0;
@@ -154,8 +145,9 @@ void handle_user(int client_socket, char *command) {
     printf("Received USER command with username: %s\n", username); // Debugging print
 
     // Reset the login state
-    logged_in_user[0] = '\0';
-    logged_in_pass[0] = '\0';
+   memset(logged_in_user, 0, sizeof(logged_in_user));
+    memset(logged_in_pass, 0, sizeof(logged_in_pass));
+
 
     // Check if user exists in users.csv
     FILE *fp = fopen("../users.csv", "r");
@@ -184,15 +176,41 @@ void handle_user(int client_socket, char *command) {
         send(client_socket, "530 Not logged in.\r\n", 21, 0);
     }
 }
+void trim_whitespace(char *str) {
+    char *end;
+
+    // Trim leading space
+    while (isspace((unsigned char)*str)) str++;
+
+    // Trim trailing space
+    if (*str == 0) {
+        // All spaces?
+        return;
+    }
+
+    end = str + strlen(str) - 1;
+    while (end > str && isspace((unsigned char)*end)) end--;
+
+    // Write new null terminator character
+    end[1] = '\0';
+}
 
 void handle_pass(int client_socket, char *command) {
     char password[50];
     sscanf(command, "PASS %s", password);
+    printf("Received PASS command with password: '%s'\n", password); // Debugging print
 
     if (strlen(logged_in_user) == 0) {
-        send(client_socket, "530 Not logged in.\r\n", 21, 0);
+        send(client_socket, "503 Login with USER first.\r\n", 28, 0);
         return;
     }
+
+    // Trim the received password and expected password
+    trim_whitespace(password);
+    trim_whitespace(logged_in_pass);
+
+    // Debugging prints for password comparison
+    printf("Expected password: '%s'\n", logged_in_pass);
 
     // Check if the password matches the stored password for the logged-in user
     if (strcmp(password, logged_in_pass) == 0) {
@@ -214,6 +232,7 @@ void handle_pass(int client_socket, char *command) {
         printf("Successful login\n");
         send(client_socket, "230 User logged in, proceed.\r\n", 30, 0);
     } else {
+        printf("Password mismatch. Provided: '%s', Expected: '%s'\n", password, logged_in_pass); // Debugging print
         send(client_socket, "530 Incorrect password. Not logged in.\r\n", 41, 0);
         logged_in_user[0] = '\0'; // Clear the logged-in user on failure
         logged_in_pass[0] = '\0'; // Clear the logged-in password on failure

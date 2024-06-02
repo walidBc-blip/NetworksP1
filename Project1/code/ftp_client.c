@@ -9,23 +9,13 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <sys/select.h>
+#include "ftp_client.h"
 
-#define BUFFER_CAPACITY 2048
 
-#define CTRL_PORT 2121
-#define DATA_CHANNEL_PORT 2020
 bool serverActive = true;
 int authStatus = -1;
 
-int initializeSocket(bool listenMode, int portNumber);
-void handleClientCommand(char *commandBuffer, int controlSocketFd);
-char *generatePortString(const char *ip, int port);
-char *transmitToServer(int socketFd, const char *buffer);
-bool configurePortCommand(int socketFd, int channel);
 
-void executeLocalPWD();
-void executeLocalCWD(char *buffer);
-void executeLocalLIST();
 
 int main() {
     // Initialize the control socket
